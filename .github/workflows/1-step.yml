@@ -1,0 +1,76 @@
+# Name is Step x, where x is the last step number in the exercise.
+name: Step 1
+
+# Define how the workflow is triggered.
+on:
+  push:
+    paths:
+      - 'docs/ReviewFindings.md'
+      - 'app/tests/**'
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+jobs:
+  exercise_checking:
+    name: Start checking
+    uses: ./.github/workflows/exercise-checking.yml
+
+  run_checks:
+    name: Run Checks
+    runs-on: ubuntu-latest
+    needs: exercise_checking
+    if: needs.exercise_checking.outputs.comment-id != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check ReviewFindings.md exists and is not empty
+        run: |
+          if [ ! -s docs/ReviewFindings.md ]; then
+            echo "docs/ReviewFindings.md is missing or empty"
+            exit 1
+          fi
+
+      - name: Check tests folder has at least 5 test blocks
+        run: |
+          test_block_count=$(grep -rEo "it\(|test\(" app/tests/ | wc -l)
+          if [ "$test_block_count" -lt 5 ]; then
+            echo "Expected at least 5 it( or test( blocks in app/tests/, found $test_block_count"
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm install
+
+      - name: Run tests
+        working-directory: app
+        run: npm test
+
+  exercise_passed:
+    name: Exercise passed
+    needs: [exercise_checking, run_checks]
+    if: needs.run_checks.result == 'success'
+    uses: ./.github/workflows/exercise-passed.yml
+    with:
+      module-title: "Code Quality Assurance with Agents"
+      issue-url: ${{ needs.exercise_checking.outputs.issue-url }}
+      issue-number: ${{ needs.exercise_checking.outputs.issue-number }}
+      comment-id: ${{ needs.exercise_checking.outputs.comment-id }}
+
+  exercise_failed:
+    name: Exercise failed
+    needs: [exercise_checking, run_checks]
+    if: always() && needs.run_checks.result == 'failure'
+    uses: ./.github/workflows/exercise-failed.yml
+    with:
+      comment-id: ${{ needs.exercise_checking.outputs.comment-id }}
+      feedback-message: "One or more checks failed. Make sure: (1) `docs/ReviewFindings.md` exists and is not empty, (2) `app/tests/` contains a combined total of at least 5 `it(` or `test(` blocks, and (3) `npm test` passes. Check the [Actions](../actions) tab for details."
