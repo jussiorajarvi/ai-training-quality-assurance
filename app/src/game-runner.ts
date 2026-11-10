@@ -1,30 +1,47 @@
-import {Game} from './game';
+import {DIE_FACES, Game, Logger} from './game';
+
+/** One in ten answers is wrong: an answer is wrong when the 0-9 draw equals this value. */
+const WRONG_ANSWER_DRAW = 7;
+const ANSWER_DRAW_RANGE = 10;
+export const DEFAULT_MAX_TURNS = 10_000;
+
+export interface RunOptions {
+    readonly random?: () => number;
+    readonly log?: Logger;
+    readonly players?: readonly string[];
+    readonly maxTurns?: number;
+}
 
 export class GameRunner {
     public static main(): void {
-        this.runProgram();
+        GameRunner.runProgram();
     }
 
-    public static runProgram(random: () => number = Math.random) {
-        const game = new Game();
-        game.add("Chet");
-        game.add("Pat");
-        game.add("Sue");
+    /** Plays a full game and returns the winner's name. */
+    public static runProgram({
+        random = Math.random,
+        log = console.log,
+        players = ['Chet', 'Pat', 'Sue'],
+        maxTurns = DEFAULT_MAX_TURNS,
+    }: RunOptions = {}): string {
+        const game = new Game(log);
+        players.forEach(name => game.add(name));
 
-        let notAWinner;
-        do {
+        for (let turn = 0; turn < maxTurns; turn++) {
+            game.roll(Math.floor(random() * DIE_FACES) + 1);
 
-            game.roll(Math.floor(random() * 6) + 1);
-
-            if (Math.floor(random() * 10) == 7) {
-                notAWinner = game.wrongAnswer();
-            } else {
-                notAWinner = game.wasCorrectlyAnswered();
+            if (game.isQuestionPending()) {
+                if (Math.floor(random() * ANSWER_DRAW_RANGE) === WRONG_ANSWER_DRAW) {
+                    game.wrongAnswer();
+                } else {
+                    game.correctAnswer();
+                }
             }
 
-        } while (notAWinner);
+            if (game.winner !== undefined) {
+                return game.winner;
+            }
+        }
+        throw new Error(`No winner after ${maxTurns} turns`);
     }
 }
-
-GameRunner.main();
-
